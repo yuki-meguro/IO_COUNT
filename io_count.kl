@@ -1,0 +1,111 @@
+--* coding: Shift-jis *--
+--
+--  --------------------------------------
+--  Released under the Apache 2.0 License.
+--  Yuki Meguro
+--  https://github.com/yuki-meguro
+--  --------------------------------------
+--
+--  --------------------------------------
+--  Author: Yuki Meguro
+--
+--  Description:
+--    DINの立ち上がりをカウントします。
+--    CONSTの値は必要に応じて変更して下さい。
+--
+--  Dependancies: none
+--  --------------------------------------
+
+PROGRAM IO_COUNT
+  %SYSTEM
+  %ALPHABETIZE
+  %NOLOCKGROUP
+  %NOBUSYLAMP
+  %NOPAUSESHFT
+  %NOABORT = ERROR + COMMAND
+  %NOPAUSE=ERROR+COMMAND+TPENABLE
+  %COMMENT='io count prog.'
+CONST
+  act_flg_no = 1
+    --Karelプログラムの実行状況(ON: Acctive)
+  stp_flg_no = 2
+    --Karelプログラムの終了フラグ。(ON: Stop)
+    --TPプログラム等で多軸制御する場合などに
+    --多重起動を防止するために使用して下さい。
+  set_reg = 1
+    --カウントアップに使用する数値レジスタ
+  max_val = 10
+    --数値レジスタの最大値
+  io_no = 10
+    --カウントアップするDIN番号
+
+VAR
+  stat: INTEGER
+  reg_int: INTEGER
+  reg_real: REAL
+  real_flg: BOOLEAN
+  exit_loop: BOOLEAN
+  start_flg: BOOLEAN
+  on_flg, cnt_flg: BOOLEAN
+
+BEGIN
+  ----------
+  --Settings
+  ----------
+  SET_PORT_CMT(35, act_flg_no, 'Active status', stat) --FLG
+  SET_PORT_CMT(35, stp_flg_no, 'Program stop', stat) --FLG
+  SET_REG_CMT (set_reg, 'IO_Count', stat)
+  FLG[stp_flg_no] = OFF
+  start_flg = TRUE  --Karel active status
+  exit_loop = FALSE --Karel main loop
+  on_flg = FALSE
+  cnt_flg = FALSE
+  GET_REG(set_reg, real_flg, reg_int, reg_real, stat)
+  IF (reg_int >= max_val) OR (reg_int < 0) THEN
+  --Clear Register
+    reg_int = 0
+    SET_INT_REG(set_reg, reg_int, stat)
+  ENDIF
+  -----------
+  --CONDITION
+  -----------
+  CONDITION[1]:
+    WHEN start_flg = TRUE DO
+      FLG[act_flg_no] = ON
+      ENABLE CONDITION[1]
+    WHEN FLG[stp_flg_no] = ON DO
+      exit_loop = TRUE
+  ENDCONDITION
+  ENABLE CONDITION[1]
+
+  CONDITION[2]:
+    WHEN DIN[io_no]+ DO
+      on_flg = TRUE
+      ENABLE CONDITION[2]
+    WHEN (on_flg = TRUE) AND (DIN[io_no] = OFF) DO
+      on_flg = FALSE
+      cnt_flg = TRUE
+      ENABLE CONDITION[2]
+  ENDCONDITION
+  ENABLE CONDITION[2]
+
+  --------------
+  --Main Program
+  --------------
+  REPEAT
+    GET_REG(set_reg, real_flg, reg_int, reg_real, stat)
+    IF cnt_flg = TRUE THEN
+      reg_int = reg_int + 1
+      SET_INT_REG(set_reg, reg_int, stat)
+      cnt_flg = FALSE
+    ENDIF
+    delay 10
+  UNTIL exit_loop
+
+  -----------
+  --Clear FLG
+  -----------
+  FLG[act_flg_no] = OFF
+  FLG[stp_flg_no] = OFF
+
+END IO_COUNT
