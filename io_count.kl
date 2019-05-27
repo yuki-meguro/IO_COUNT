@@ -15,97 +15,127 @@
 --
 --  Dependancies: none
 --  --------------------------------------
-
 PROGRAM IO_COUNT
-  %SYSTEM
-  %ALPHABETIZE
-  %NOLOCKGROUP
-  %NOBUSYLAMP
-  %NOPAUSESHFT
-  %NOABORT = ERROR + COMMAND
-  %NOPAUSE=ERROR+COMMAND+TPENABLE
-  %COMMENT='io count prog.'
+    %SYSTEM
+    %ALPHABETIZE
+    %NOLOCKGROUP
+    %NOBUSYLAMP
+    %NOPAUSESHFT
+    %NOABORT = ERROR + COMMAND
+    %NOPAUSE=ERROR+COMMAND+TPENABLE
+    %COMMENT='i/o count karel'
 CONST
-  act_flg_no = 1
+    act_ = 1
     --Karelプログラムの実行状況(ON: Acctive)
-  stp_flg_no = 2
+    stp_ = 2
     --Karelプログラムの終了フラグ。(ON: Stop)
     --TPプログラム等で多軸制御する場合などに
     --多重起動を防止するために使用して下さい。
-  set_reg = 1
+    reg_no = 1
     --カウントアップに使用する数値レジスタ
-  max_val = 10
-    --数値レジスタの最大値
-  io_no = 10
+    io_no = 10
     --カウントアップするDIN番号
-
+    max_val = 1000
+    --数値レジスタの最大値
+    prog_delay = 10
+    --処理時間を指定します。
+    --LR MATE+ 2msec other 10msec以上を指定して下さい。
 VAR
-  stat: INTEGER
-  reg_int: INTEGER
-  reg_real: REAL
-  real_flg: BOOLEAN
-  exit_loop: BOOLEAN
-  start_flg: BOOLEAN
-  on_flg, cnt_flg: BOOLEAN
+----------------
+-- Global
+----------------
+
+    acctive,
+    loop,
+    on_flg,
+    cnt_flg: BOOLEAN
+----------------
+--ROUTINE BEGIN
+----------------
+    ROUTINE set_name
+    VAR
+        stat: INTEGER
+    BEGIN
+        SET_PORT_CMT(35, act_, 'Active status', stat)
+        SET_PORT_CMT(35, stp_, 'Program stop', stat)
+        SET_REG_CMT(reg_no, 'IO Count', stat)
+    END set_name
+
+    ROUTINE initialize
+    BEGIN
+        acctive = TRUE
+        loop = TRUE
+        cnt_flg = FALSE
+        FLG[act_] = OFF
+        FLG[stp_] = OFF    
+    END Initialize
+
+    ROUTINE count_up
+    VAR
+        --routine global
+            stat: INTEGER
+        --GET_REG VAR
+            real_flg: BOOLEAN
+            reg_int: INTEGER
+            reg_real: REAL
+        --Calc VAR
+            ans: INTEGER
+    BEGIN
+        GET_REG(reg_no, real_flg, reg_int, reg_real, stat)
+        ans = reg_int + 1
+        SET_INT_REG(reg_no, ans, stat)
+    END count_up
+
+----------------
+--ROUTINE END
+----------------
 
 BEGIN
-  ----------
-  --Settings
-  ----------
-  SET_PORT_CMT(35, act_flg_no, 'Active status', stat) --FLG
-  SET_PORT_CMT(35, stp_flg_no, 'Program stop', stat) --FLG
-  SET_REG_CMT (set_reg, 'IO_Count', stat)
-  FLG[stp_flg_no] = OFF
-  start_flg = TRUE  --Karel active status
-  exit_loop = FALSE --Karel main loop
-  on_flg = FALSE
-  cnt_flg = FALSE
-  GET_REG(set_reg, real_flg, reg_int, reg_real, stat)
-  IF (reg_int >= max_val) OR (reg_int < 0) THEN
-  --Clear Register
-    reg_int = 0
-    SET_INT_REG(set_reg, reg_int, stat)
-  ENDIF
-  -----------
-  --CONDITION
-  -----------
-  CONDITION[1]:
-    WHEN start_flg = TRUE DO
-      FLG[act_flg_no] = ON
-      ENABLE CONDITION[1]
-    WHEN FLG[stp_flg_no] = ON DO
-      exit_loop = TRUE
-  ENDCONDITION
-  ENABLE CONDITION[1]
 
-  CONDITION[2]:
+------------------
+--CONDITION BEGIN
+------------------
+    CONDITION[1]:
+        WHEN acctive = TRUE DO
+            FLG[act_] = TRUE
+            ENABLE CONDITION[1]
+        WHEN FLG[stp_] = ON DO
+            loop = FALSE
+    ENDCONDITION
+    ENABLE CONDITION[1]
+
+    CONDITION[2]:
     WHEN DIN[io_no]+ DO
-      on_flg = TRUE
-      ENABLE CONDITION[2]
+        on_flg = TRUE
+        ENABLE CONDITION[2]
     WHEN (on_flg = TRUE) AND (DIN[io_no] = OFF) DO
-      on_flg = FALSE
-      cnt_flg = TRUE
-      ENABLE CONDITION[2]
-  ENDCONDITION
-  ENABLE CONDITION[2]
+        on_flg = FALSE
+        cnt_flg = TRUE
+        ENABLE CONDITION[2]
+    ENDCONDITION
+    ENABLE CONDITION[2]
 
-  --------------
-  --Main Program
-  --------------
-  REPEAT
-    GET_REG(set_reg, real_flg, reg_int, reg_real, stat)
-    IF cnt_flg = TRUE THEN
-      reg_int = reg_int + 1
-      SET_INT_REG(set_reg, reg_int, stat)
-      cnt_flg = FALSE
-    ENDIF
-    delay 10
-  UNTIL exit_loop
+    ------------------
+    --CONDITION END
+    ------------------
 
-  -----------
-  --Clear FLG
-  -----------
-  FLG[act_flg_no] = OFF
-  FLG[stp_flg_no] = OFF
+    --------------
+    --MAIN Program
+    --------------
+    set_name
+    initialize
+    --------------
+    -- LOOP
+    --------------
+    WHILE loop DO
+        IF cnt_flg = TRUE THEN
+            count_up
+            cnt_flg = FALSE
+        ENDIF
+        DELAY prog_delay
+    ENDWHILE
+
+    FLG[act_] = OFF
+    FLG[stp_] = OFF
 
 END IO_COUNT
